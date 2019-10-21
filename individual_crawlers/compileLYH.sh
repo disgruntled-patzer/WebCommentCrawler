@@ -1,0 +1,1 @@
+g++ PartD.cpp -std=c++11 -l curl -o PartD.out
