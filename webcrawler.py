@@ -11,13 +11,15 @@ from urllib.parse import urlsplit
 
 QUEUED_FILE = "queued.txt" # txt file containing links to be crawled
 CRAWLED_FILE = "crawled.txt" # txt file containing links already crawled
+USER_FILE = "user.txt" # txt file containing links of user profiles
 THREAD_NUM = 8 # number of threads used in this program
-TIME_TO_RUN = 50 # time for the webcrawler to run in seconds
+TIME_TO_RUN = 120 # time for the webcrawler to run in seconds
 ORIGINAL_CHAN = "NUScast" # Original youtube channel user name
 
 start_time = time() # the time program is executed
 queued_set = set() # set of links to be crawled
 crawled_set = set() # set of links already crawled
+user_map = {} # dictionary (hash map) of user profile links to appearance count
 queue = Queue() # queue of links to be crawled (used for worker threads)
 
 #####################################################
@@ -50,8 +52,21 @@ def set_to_file(set_content, file):
                 f.write(item + '\n')
         except Exception as e:
             if __debug__:
-                print("Unable to add \"" + item + "\" to file." + str(e))
-            
+                print("Unable to add \"" + item + "\" to file. " + str(e))
+
+# Method to load content of dictionary into file
+def dictionary_to_file(content, file):
+    with open(file, encoding='UTF-8', mode='w') as f:
+        try:
+            # sort list of users in alphabetical order
+            sorted_list = sorted(content.items(), key=lambda kv: kv[0].lower())
+            # sort list in descending order of appearances
+            sorted_list = sorted(sorted_list, key=lambda kv: kv[1], reverse=True)
+            for kv in sorted_list:
+                f.write(kv[0] + ' (' + str(kv[1]) + ')\n')
+        except Exception as e:
+            if __debug__:
+                print("Unable to add \"" + str(kv) + "\" to file. " + str(e))
 
 #####################################################
 #                                                   #
@@ -65,6 +80,7 @@ class WebpageParser(HTMLParser):
         super().__init__()
         self.page_url = page_url
         self.links = set()
+        self.users = set()
         self.valid_link_ids = ["/watch?", "/user/"]
 
     def handle_starttag(self, tag, attrs):
@@ -76,29 +92,36 @@ class WebpageParser(HTMLParser):
                     # ensures that link added is a full link
                     link_fragments = urlsplit(self.page_url)
                     link = urljoin(link_fragments[0] + "://" + link_fragments[1], value)
-                    if (self.verify_links(link)):
+                    link_type = self.verify_links(link)
+                    # add link to set for crawling
+                    if (link_type == 1):
                         self.links.add(link)
+                    # add link to set for tracking user count
+                    elif (link_type == 2):
+                        self.users.add(link)
+                        
 
     # Only accept "valid" links
     def verify_links(self, link):
         # We don't want to revisit any links on the original channel
         if ORIGINAL_CHAN in link:
             return False
-        for i in range(len(self.valid_link_ids)):
-            if self.valid_link_ids[i] in link:
-                return True
+        if self.valid_link_ids[0] in link:
+            return 1 # video watch links
+        elif self.valid_link_ids[1] in link:
+            return 2 # user profile links
         return False
-    
+
     def get_links(self):
-        return self.links
-    
+        return [self.links, self.users]
+
 # Method to retrieve links in page
 def get_webpage_links(link):
     elapsed_time = -1
     parser = WebpageParser(link)
     try:
-        # set timeout on rqeuest call to be 15s
-        response = urlopen(link, timeout=15)        
+        # set timeout on request call to be 15s
+        response = urlopen(link, timeout=15)
         start = time()
         # check that the link is a valid html page
         if 'text/html' in response.getheader('Content-Type'):
@@ -113,14 +136,27 @@ def get_webpage_links(link):
             print("Unable to retrieve \"" + link + "\". " + str(e))
     return elapsed_time, parser.get_links()
 
-# Method to add retrieved links to the queued set
+# Method to add retrieved video links to the queued set
 def add_links_to_queue(links):
     for link in links:
         if link not in queued_set and link not in crawled_set:
             queued_set.add(link)
 
-# Method to update contents of the queued and crawled files
+# Method to add retrieved user profile links to user list
+def add_users(links):
+    for link in links:
+        parsed_link = link.split("?")
+        # check if user link is to profile and not subscribe button
+        if len(parsed_link) == 1:
+            # get name of user
+            user = parsed_link[0].split("/")[-1]
+            if user not in user_map:
+                user_map[user] = 0
+            user_map[user] += 1
+
+# Method to update contents of the users, queued and crawled files
 def update_files(crawled_link, elapsed_time):
+    dictionary_to_file(user_map, USER_FILE)
     set_to_file(queued_set, QUEUED_FILE)
     if elapsed_time != -1:
         content = crawled_link + " (" + str(elapsed_time) + "ms)"
@@ -131,10 +167,13 @@ def crawl_page(link):
     # checks that no duplicate page crawling occur
     if link not in crawled_set:
         elapsed_time, links = get_webpage_links(link)
+        video_links = links[0]
+        user_links = links[1]
         try:
             queued_set.remove(link)
             crawled_set.add(link)
-            add_links_to_queue(links)
+            add_users(user_links)
+            add_links_to_queue(video_links)
         except Exception as e:
             if __debug__:
                 print(e)
@@ -182,7 +221,7 @@ def update_jobs():
         else:
             print("No more valid links to crawl")
             break
-        
+
 # Method to kickstart webcrawler
 def start():
     global queued_set
