@@ -253,6 +253,19 @@ class Crawler{
 			// before the next iteration of accessing these urls.
 			std::unordered_set<std::string> temp_url_lookup;
 
+			/*std::string urlStart, urlEnd;
+			if (iter == 0){
+				urlStart.assign("/watch?");
+			}
+			else{
+				urlStart.assign("\\/user\\/");
+			}
+			urlEnd.assign("\"");
+
+			for (auto it : recv_buffer){
+				//
+			}*/
+
 			// URL's possible prefixes and suffixes. /watch? is for videos, /user/ is for user accounts
 			// Note that CURL displays /user/ as \/user\/, so the extra "\"" characters must be removed
 			// Both url types end with a ", hence it is used as the suffix
