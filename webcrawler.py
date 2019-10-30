@@ -12,7 +12,8 @@ from urllib.parse import urlsplit
 QUEUED_FILE = "queued.txt" # txt file containing links to be crawled
 CRAWLED_FILE = "crawled.txt" # txt file containing links already crawled
 THREAD_NUM = 8 # number of threads used in this program
-TIME_TO_RUN = 10 # time for the webcrawler to run in seconds
+TIME_TO_RUN = 50 # time for the webcrawler to run in seconds
+ORIGINAL_CHAN = "NUScast" # Original youtube channel user name
 
 start_time = time() # the time program is executed
 queued_set = set() # set of links to be crawled
@@ -64,6 +65,7 @@ class WebpageParser(HTMLParser):
         super().__init__()
         self.page_url = page_url
         self.links = set()
+        self.valid_link_ids = ["/watch?", "/user/"]
 
     def handle_starttag(self, tag, attrs):
         # finds for anchor tags in page
@@ -74,8 +76,19 @@ class WebpageParser(HTMLParser):
                     # ensures that link added is a full link
                     link_fragments = urlsplit(self.page_url)
                     link = urljoin(link_fragments[0] + "://" + link_fragments[1], value)
-                    self.links.add(link)
+                    if (self.verify_links(link)):
+                        self.links.add(link)
 
+    # Only accept "valid" links
+    def verify_links(self, link):
+        # We don't want to revisit any links on the original channel
+        if ORIGINAL_CHAN in link:
+            return False
+        for i in range(len(self.valid_link_ids)):
+            if self.valid_link_ids[i] in link:
+                return True
+        return False
+    
     def get_links(self):
         return self.links
     
@@ -115,7 +128,7 @@ def update_files(crawled_link, elapsed_time):
 
 # Method to start crawling a page and update queued and crawled links from the result
 def crawl_page(link):
-    # checks that no duplicate page crawling occurs
+    # checks that no duplicate page crawling occur
     if link not in crawled_set:
         elapsed_time, links = get_webpage_links(link)
         try:
@@ -173,7 +186,8 @@ def update_jobs():
 # Method to kickstart webcrawler
 def start():
     global queued_set
-    queued_set = file_to_set(QUEUED_FILE)
+    initial_link = ("https://www.youtube.com/user/" + ORIGINAL_CHAN + "/videos")
+    queued_set.add(initial_link)
     crawl_page(list(queued_set)[0]) # crawl the first link in the file
     create_workers()
     update_jobs()
