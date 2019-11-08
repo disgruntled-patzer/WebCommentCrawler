@@ -151,16 +151,17 @@ def add_users(links):
             # get name of user
             user = parsed_link[0].split("/")[-1]
             if user not in user_map:
-                user_map[user] = 0
-            user_map[user] += 1
+                user_map[user] = 1
+            else:
+                user_map[user] += 1
 
 # Method to update contents of the users, queued and crawled files
 def update_files(crawled_link, elapsed_time):
     dictionary_to_file(user_map, USER_FILE)
     set_to_file(queued_set, QUEUED_FILE)
+    # If elapsed time = -1, it means link is not valid or hasn't been crawled
     if elapsed_time != -1:
-        content = crawled_link + " (" + str(elapsed_time) + "ms)"
-        append_to_file(content, CRAWLED_FILE)
+        append_to_file(crawled_link, CRAWLED_FILE)
 
 # Method to start crawling a page and update queued and crawled links from the result
 def crawl_page(link):
